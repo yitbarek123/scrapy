@@ -1,0 +1,4 @@
+scrapy>=2.5.0
+requests>=2.26.0
+scrapy-playwright>=0.0.8
+mysql-connector-python>=8.3.0
