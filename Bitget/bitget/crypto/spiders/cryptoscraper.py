@@ -19,11 +19,11 @@ class CryptoscraperSpider(scrapy.Spider):
         lock_key = '/my_lock'
         lock_acquired = False
         ps=["BTCUSDT","ETHUSDT","ADAUSDT","XRPUSDT"]
-        #ps=["BTCUSDT"]
+        ps=["BTCUSDT"]
         for p in ps:
             yield scrapy.Request("https://www.bitget.com/spot/"+p,meta={'playwright':True},cb_kwargs={'p': p})
             print(ps)
-            time.sleep(100)
+            #time.sleep(100)
 
     async def parse5(self, response):
         data = {}

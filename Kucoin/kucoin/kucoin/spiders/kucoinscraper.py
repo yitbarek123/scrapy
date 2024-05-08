@@ -13,10 +13,10 @@ class KucoinscraperSpider(scrapy.Spider):
     start_urls = ["https://www.kucoin.com/trade/BTC-USDT"]
 
     def start_requests(self):
-        urls = ["https://www.kucoin.com/trade/BTC-USDT","https://www.kucoin.com/trade/ETH-USDT","https://www.kucoin.com/trade/ADA-USDT","https://www.kucoin.com/trade/XRP-USDT"]
+        urls = ["https://www.kucoin.com/trade/BTC-USDT"]#,"https://www.kucoin.com/trade/ETH-USDT","https://www.kucoin.com/trade/ADA-USDT","https://www.kucoin.com/trade/XRP-USDT"]
         for url in urls:
             yield scrapy.Request(url,meta={'playwright':True})
-            time.sleep(100)
+            #time.sleep(100)
     async def parse(self, response):
         lock_file = '/shared_lock_files/'+str(response.url[29:].replace("-",""))+'.lock'
         # Attempt to acquire the lock

@@ -14,11 +14,11 @@ class CryptoscraperSpider(scrapy.Spider):
     start_urls = [""]
 
     def start_requests(self):
-        ps=["btc-usdt","ada-usdt","eth-usdt","xrp-usdt"]
+        ps=["btc-usdt"]#,"ada-usdt","eth-usdt","xrp-usdt"]
         for p in ps:
             yield scrapy.Request("https://pro.kraken.com/app/trade/"+p,meta={'playwright':True},cb_kwargs={'p': p})
             print(ps)
-            time.sleep(100)
+            #time.sleep(100)
 
 
     async def parse5(self, response):
