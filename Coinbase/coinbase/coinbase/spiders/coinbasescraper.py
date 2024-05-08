@@ -19,7 +19,7 @@ class CoinbasescraperSpider(scrapy.Spider):
         urls=["https://exchange.coinbase.com/trade/BTC-USDT"]#,"https://exchange.coinbase.com/trade/BTC-USD"]
         for url in urls:
             yield scrapy.Request(url,meta={'playwright':True})
-            time.sleep(0.3)
+            time.sleep(100)
 
 
     async def parse5(self, response):

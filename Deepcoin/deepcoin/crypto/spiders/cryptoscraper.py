@@ -14,11 +14,12 @@ class CryptoscraperSpider(scrapy.Spider):
 
     def start_requests(self):
         ps=["BTC%2FUSDT","ETH%2FUSDT","ADA%2FUSDT","XRP%2FUSDT"]
-        ps=["BTC%2FUSDT"]
+        #ps=["BTC%2FUSDT"]
 
         for p in ps:
             yield scrapy.Request("https://www.deepcoin.com/en/Spot?currentId="+p,meta={'playwright':True},cb_kwargs={'p': p})
             print(ps)
+            time.sleep(100)
 
 
     async def parse5(self, response):

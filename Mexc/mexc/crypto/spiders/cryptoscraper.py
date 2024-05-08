@@ -14,11 +14,11 @@ class CryptoscraperSpider(scrapy.Spider):
 
     def start_requests(self):
         ps=["BTC_USDT","ADA_USDT","ETH_USDT","XRP_USDT"]
-        ps=["BTC_USDT"]
+        ps=["BTC_USDT","ADA_USDT","ETH_USDT","XRP_USDT"]
         for p in ps:
             yield scrapy.Request("https://www.mexc.com/exchange/"+p,meta={'playwright':True},cb_kwargs={'p': p})
             print(ps)
-
+            time.sleep(100)
 
     async def parse5(self, response):
         data = {}

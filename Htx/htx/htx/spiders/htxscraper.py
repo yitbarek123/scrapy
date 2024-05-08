@@ -19,8 +19,10 @@ class HtxscraperSpider(scrapy.Spider):
         self.client = Client()
     def start_requests(self):
         urls=["https://www.htx.com/en-us/trade/btc_usdt","https://www.htx.com/en-us/trade/eth_usdt","https://www.htx.com/en-us/trade/ada_usdt","https://www.htx.com/en-us/trade/xrp_usdt"]        for url in urls:
+        for url in urls:
             yield scrapy.Request(url,meta={'playwright':True})
-    
+            time.sleep(100)
+
     async def parse5(self, response):
         data = {}
         maxValue=0
