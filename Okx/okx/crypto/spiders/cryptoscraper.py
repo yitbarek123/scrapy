@@ -11,9 +11,12 @@ class CryptoscraperSpider(scrapy.Spider):
     name = "cryptoscraper"
     allowed_domains = ["okx.com"]
     start_urls = ["https://www.okx.com/trade-spot/btc-usdt"]
-
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
     def start_requests(self):
-        ps=["btc-usdt"]#,"eth-usdt","ada-usdt","xrp-usdt"]
+        ps=["btc-usdt","eth-usdt","ada-usdt","xrp-usdt"]
         for p in ps:
             yield scrapy.Request("https://www.okx.com/trade-spot/"+p,meta={'playwright':True})
             print(p)
@@ -56,7 +59,8 @@ class CryptoscraperSpider(scrapy.Spider):
             await page.goto(response.url)
 
             await page.wait_for_timeout(30000)
-            
+            old_result=""
+            cnt=1
             while True:
                 xpath = '//body//span[@class="price sell" or @class="price buy" or @class="amount" or  @class="time"]'
                 xpath = '//body//span[@class="index_price__b4OZN index_price__NdykK index_sell__yp73y" or @class="index_amount__bQovG index_amount__kwV-1" or @class="index_price__b4OZN index_price__NdykK index_buy__qkWgi" or  @class="index_time__KmC98"]'
@@ -81,19 +85,32 @@ class CryptoscraperSpider(scrapy.Spider):
                     #    for i in range(3):
                     #        result_lists.append(l[i])
                 
-                if cnt==0:
-                    old_result=result_lists[0]
-                if cnt>1200:
-                    if result_lists[0]==old_result:
+                print(result_lists)
+                if old_result=="":
+                    if len(result_lists)>0:
+                        old_result=result_lists[0]
+                if cnt%1200==0:
+                    if old_result==result_lists[0]:
                         os.remove(lock_file)
                         print("lock released")
+                        cnt=1
                         break
                     old_result=result_lists[0]
-                    cnt=0
-                if result_lists==[]:
-                    os.remove(lock_file)
+                if cnt>72000:
+                    #if result_lists[0]==old_result:
+                    try:
+                        os.remove(lock_file)
+                    except:
+                        pass
                     print("lock released")
+                    cnt=1
                     break
+                if cnt>1500:
+                    if result_lists==[]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
                 cnt+=1
                 print(cnt)
                 result_list_of_tuples=[tuple(result_lists[i:i+4]) for i in range(0, len(result_lists), 4)]
@@ -107,3 +124,4 @@ class CryptoscraperSpider(scrapy.Spider):
                 time.sleep(0.5)
             print("scrap again")
             yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse)
+            

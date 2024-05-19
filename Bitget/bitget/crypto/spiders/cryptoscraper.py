@@ -6,15 +6,18 @@ from datetime import datetime
 import time
 import asyncio
 from crypto.items import CryptoItem
-from etcd import Client
+#from etcd import Client
 import os
 
 class CryptoscraperSpider(scrapy.Spider):
     name = "cryptoscraper"
     allowed_domains = ["bitget.com"]
     start_urls = ["https://www.bitget.com/spot/BTCUSDT"]
-    etcd_client = Client(host='localhost', port=2379)
-
+    #etcd_client = Client(host='localhost', port=2379)
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
     def start_requests(self):
         lock_key = '/my_lock'
         lock_acquired = False
@@ -34,7 +37,7 @@ class CryptoscraperSpider(scrapy.Spider):
             await asyncio.sleep(0.5)    
     
     async def parse(self, response,p):
-        lock_file = '/shared_lock_files/'+str(response.url[26:].replace("_",""))+'.lock'
+        lock_file = '/shared_lock_files/'+str(response.url[28:].replace("_",""))+'.lock'
         # Attempt to acquire the lock
         while os.path.exists(lock_file):
             print("Lock file exists. Waiting to acquire the lock...")
@@ -87,8 +90,9 @@ class CryptoscraperSpider(scrapy.Spider):
                     #print(text_contentt)
                     result_lists.append(text_contentt)
                 if cnt==0:
-                    old_result=result_list[0]
-                if cnt>1200:
+                    if len(result_list)==[]:
+                        old_result=result_list[0]
+                if cnt>12:
                     if result_list[0]==old_result:
                         os.remove(lock_file)
                         print("lock released")

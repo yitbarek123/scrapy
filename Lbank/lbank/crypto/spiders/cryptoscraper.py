@@ -6,15 +6,18 @@ from datetime import datetime
 import time
 import asyncio
 from crypto.items import CryptoItem
-
+import os
 class CryptoscraperSpider(scrapy.Spider):
     name = "lbankscraper"
     allowed_domains = ["lbank.com"]
     start_urls = ["https://www.lbank.com/trade/btc_usdt"]
-
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
     def start_requests(self):
         ps=["BTC_USDT","ETH_USDT","ADA_USDT"]
-        ps=["btc_usdt"]#,"eth_usdt","ada_usdt","xrp_usdt"]
+        ps=["btc_usdt","eth_usdt","ada_usdt","xrp_usdt"]
         for p in ps:
             yield scrapy.Request("https://www.lbank.com/trade/"+p,meta={'playwright':True},cb_kwargs={'p': p})
             print(ps)
@@ -30,6 +33,20 @@ class CryptoscraperSpider(scrapy.Spider):
             await asyncio.sleep(0.5)    
     
     async def parse(self, response,p):
+        lock_file = '/shared_lock_files/'+str(p.replace("-",""))+'.lock'
+        # Attempt to acquire the lock
+
+        cnt2=0
+        while os.path.exists(lock_file):
+            print("Lock file exists. Waiting to acquire the lock...")
+            if cnt2>71800:
+                os.remove(lock_file)
+                cnt2=0
+            cnt2+=1
+            time.sleep(0.5)
+        # Create the lock file
+        with open(lock_file, 'w') as f:
+            f.write('Lock acquired') 
         data = {}
         maxValue=0
         maxToken=""
@@ -51,6 +68,8 @@ class CryptoscraperSpider(scrapy.Spider):
             #await page.wait_for_timeout(10000)
             #await browser.new_context(viewport={"width":1920, "height":1080})
             await page.wait_for_timeout(30000)
+            cnt=1
+            old_result=""
             while True:
                 xpath = '//div[@class="index_right__i2mE0"]//ul[@class="index_ul__qih3J"]//div[@class="index_tradeTableItem__L6Z9U"]//span'
                 elements_amount = await page.query_selector_all(xpath)
@@ -73,6 +92,35 @@ class CryptoscraperSpider(scrapy.Spider):
                     #if len(l)==3:
                     #    for i in range(3):
                     #        result_lists.append(l[i])
+                print(result_lists)
+                if old_result=="":
+                    if len(result_lists)>0:
+                        old_result=result_lists[0]
+                if cnt%1200==0:
+                    if old_result==result_lists[0]:
+                        try:
+                            os.remove(lock_file)
+                        except:
+                            pass
+                        print("lock released")
+                        cnt=1
+                        break
+                    old_result=result_lists[0]
+                if cnt>72000:
+                    #if result_lists[0]==old_result:
+                    #os.remove(lock_file)
+                    print("lock released")
+                    cnt=1
+                    break
+                if cnt>1500:
+                    if result_lists==[]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
+                cnt+=1
+                print(cnt)
+                
                 result_list_of_tuples=[tuple(result_lists[i:i+4]) for i in range(0, len(result_lists), 4)]
                 print(result_list_of_tuples)
                 url=p.replace("_","")
@@ -80,4 +128,6 @@ class CryptoscraperSpider(scrapy.Spider):
                 litem['pair']= url.lower()
                 yield litem
                 #await page.wait_for_timeout(1000)
-                time.sleep(0.2)
+                time.sleep(0.5)
+        print("print scrapy")
+        yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse,cb_kwargs={'p': p})

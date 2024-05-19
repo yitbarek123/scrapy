@@ -11,21 +11,32 @@ class KucoinscraperSpider(scrapy.Spider):
     name = "kucoinscraper"
     allowed_domains = ["www.kucoin.com"]
     start_urls = ["https://www.kucoin.com/trade/BTC-USDT"]
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
 
     def start_requests(self):
-        urls = ["https://www.kucoin.com/trade/BTC-USDT"]#,"https://www.kucoin.com/trade/ETH-USDT","https://www.kucoin.com/trade/ADA-USDT","https://www.kucoin.com/trade/XRP-USDT"]
+        urls = ["https://www.kucoin.com/trade/BTC-USDT","https://www.kucoin.com/trade/ETH-USDT","https://www.kucoin.com/trade/ADA-USDT","https://www.kucoin.com/trade/XRP-USDT"]
         for url in urls:
             yield scrapy.Request(url,meta={'playwright':True})
             #time.sleep(100)
     async def parse(self, response):
         lock_file = '/shared_lock_files/'+str(response.url[29:].replace("-",""))+'.lock'
         # Attempt to acquire the lock
+        cnt2=0
         while os.path.exists(lock_file):
             print("Lock file exists. Waiting to acquire the lock...")
-            time.sleep(1)
+            if cnt2>71800:
+                os.remove(lock_file)
+                cnt2=0
+            cnt2+=1
+            time.sleep(0.5)
         # Create the lock file
         with open(lock_file, 'w') as f:
-            f.write('Lock acquired')   
+            f.write('Lock acquired') 
+            print("file created")  
+        print("file created")  
         data = {}
         maxValue=0
         maxToken=""
@@ -46,6 +57,8 @@ class KucoinscraperSpider(scrapy.Spider):
             pp= page.locator(f'//div[@class="flexlayout__tab_button_content" and text()="Recent Trades"]')
             await pp.click()
             await page.wait_for_timeout(30000)
+            old_result=""
+            cnt=1
             while True:
                 xpath = '//body//div[@class="recent-buy" or @class="recent-sell" or @class="recent-time" or @class="recent-price" or @class="recent-amount"]'
                 elements_amount = await page.query_selector_all(xpath)
@@ -61,19 +74,32 @@ class KucoinscraperSpider(scrapy.Spider):
                         #print("sell")
                         result_lists.append("sell")
                         #self.log(f"Class name: {class_name}")
-                if cnt==0:
-                    old_result=result_lists[0]
-                if cnt>1200:
-                    if result_lists[0]==old_result:
+                print(result_lists)
+                if old_result=="":
+                    if len(result_lists)>0:
+                        old_result=result_lists[0]
+                if cnt%1200==0:
+                    if old_result==result_lists[0]:
                         os.remove(lock_file)
                         print("lock released")
+                        cnt=1
                         break
                     old_result=result_lists[0]
-                    cnt=0
-                if result_lists==[]:
-                    os.remove(lock_file)
+                if cnt>72000:
+                    #if result_lists[0]==old_result:
+                    try:
+                        os.remove(lock_file)
+                    except:
+                        pass
                     print("lock released")
+                    cnt=1
                     break
+                if cnt>1500:
+                    if result_lists==[]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
                 cnt+=1
                 print(cnt)
                 
@@ -86,4 +112,5 @@ class KucoinscraperSpider(scrapy.Spider):
                 await page.wait_for_timeout(500)
                 time.sleep(0.5)
             print("scrap again")
+            #yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse)
             yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse)

@@ -12,9 +12,12 @@ class CryptoscraperSpider(scrapy.Spider):
     name = "cryptoscraper"
     allowed_domains = ["kraken.com"]
     start_urls = [""]
-
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
     def start_requests(self):
-        ps=["btc-usdt"]#,"ada-usdt","eth-usdt","xrp-usdt"]
+        ps=["btc-usdt","ada-usdt","eth-usdt","xrp-usdt"]
         for p in ps:
             yield scrapy.Request("https://pro.kraken.com/app/trade/"+p,meta={'playwright':True},cb_kwargs={'p': p})
             print(ps)
@@ -32,6 +35,15 @@ class CryptoscraperSpider(scrapy.Spider):
     async def parse(self, response,p):
         lock_file = '/shared_lock_files/'+str(p.replace("-",""))+'.lock'
         # Attempt to acquire the lock
+        cnt2=0
+        while os.path.exists(lock_file):
+            print("Lock file exists. Waiting to acquire the lock...")
+            if cnt2>71800:
+                os.remove(lock_file)
+                cnt2=0
+            cnt2+=1
+            time.sleep(0.5)
+       
         while os.path.exists(lock_file):
             print("Lock file exists. Waiting to acquire the lock...")
             time.sleep(1)
@@ -58,6 +70,8 @@ class CryptoscraperSpider(scrapy.Spider):
             pp= page.locator(f'//div[contains(text(), "Market trades")]')
             await pp.click()
             await page.wait_for_timeout(30000)
+            cnt=1
+            old_result=""
             while True:
                 xpath = '//div[@class="relative flex min-w-min group px-3"]//span'
                 elements_amount = await page.query_selector_all(xpath)
@@ -72,19 +86,19 @@ class CryptoscraperSpider(scrapy.Spider):
                     #result_lists.append(text_contentt)
                     #print(text_contentt)
                     
-                    if "text-ds-positive text-ds-plex-12-medium-mono ss04 ms-ds-0 me-ds-0 mt-ds-0 mb-ds-0" == class_name:
-                        if "buy" not in pp:
-                            print("buy")
-                            result_lists.append("buy")
-                            prev="buy"
-                            pp.append("buy")
+                    #if "text-ds-positive text-ds-kraken-12-medium capitalize ms-ds-0 me-ds-0 mt-ds-0 mb-ds-0" == class_name:
+                    #    if "buy" not in pp:
+                    #        print("buy")
+                    #        result_lists.append("buy")
+                    #        prev="buy"
+                    #        pp.append("buy")
                             
-                    if "text-ds-negative text-ds-plex-12-medium-mono ss04 ms-ds-0 me-ds-0 mt-ds-0 mb-ds-0" == class_name:
-                        if "sell" not in pp:
-                            print("sell")
-                            result_lists.append("sell")
-                            prev="sell"
-                            pp.append("sell")
+                    #if "text-ds-negative text-ds-kraken-12-medium capitalize ms-ds-0 me-ds-0 mt-ds-0 mb-ds-0" == class_name:
+                    #    if "sell" not in pp:
+                    #        print("sell")
+                    #        result_lists.append("sell")
+                    #        prev="sell"
+                    #        pp.append("sell")
                     
 
                     if "PRICE" not in text_contentt and "TIME" not in text_contentt and "QUA" not in text_contentt:
@@ -96,25 +110,38 @@ class CryptoscraperSpider(scrapy.Spider):
                             if t!=text_contentt:
                                 if text_contentt!="":
                                     result_lists.append(text_contentt)
+                                    print("yess")
                                     print(text_contentt)
                                     t=text_contentt
                                     pp.append(text_contentt)
-                    if len(pp)==4:
+                    #TODO get actual tradetype
+                    if len(pp)==3:
+                        result_lists.append("buy")
                         pp=[]
                 
-                if cnt==0:
-                    old_result=result_lists[0]
-                if cnt>1200:
-                    if result_lists[0]==old_result:
+                print(result_lists)
+                if old_result=="":
+                    if len(result_lists)>0:
+                        old_result=result_lists[0]
+                if cnt%1200==0:
+                    if old_result==result_lists[0]:
                         os.remove(lock_file)
                         print("lock released")
+                        cnt=1
                         break
                     old_result=result_lists[0]
-                    cnt=0
-                if result_lists==[]:
-                    os.remove(lock_file)
+                if cnt>72000:
+                    #if result_lists[0]==old_result:
+                    #os.remove(lock_file)
                     print("lock released")
+                    cnt=1
                     break
+                if cnt>1500:
+                    if result_lists==[]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
                 cnt+=1
                 print(cnt)
                 
@@ -126,6 +153,6 @@ class CryptoscraperSpider(scrapy.Spider):
                 litem['pair']= url.lower()
                 yield litem
                 await page.wait_for_timeout(1000)
-                time.sleep(1)
-            print("print scrapy")
-            yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse,cb_kwargs={'p': p})
+                time.sleep(0.5)
+        print("print scrapy")
+        yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse,cb_kwargs={'p': p})

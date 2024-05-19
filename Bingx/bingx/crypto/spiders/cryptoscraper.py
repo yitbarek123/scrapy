@@ -30,7 +30,7 @@ class CryptoscraperSpider(scrapy.Spider):
             await asyncio.sleep(0.5)    
     
     async def parse(self, response,p):
-        lock_file = '/shared_lock_files/'+str(response.url[26:].replace("_",""))+'.lock'
+        lock_file = '/shared_lock_files/'+"BTCUSDT"+'.lock'
         # Attempt to acquire the lock
         while os.path.exists(lock_file):
             print("Lock file exists. Waiting to acquire the lock...")
@@ -90,8 +90,8 @@ class CryptoscraperSpider(scrapy.Spider):
                         result_lists.append("sell")
                     result_lists.append(text_contentt.replace("\n","").replace(" ",""))
                     #print(class_name)
-                                if cnt==0:
-                old_result=result_list[0]
+                if cnt==0:
+                    old_result=result_list[0]
                 if cnt>1200:
                     if result_list[0]==old_result:
                         os.remove(lock_file)

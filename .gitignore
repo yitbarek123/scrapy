@@ -1,0 +1,3 @@
+*.lock
+*.swp
+*shared_lock_files2

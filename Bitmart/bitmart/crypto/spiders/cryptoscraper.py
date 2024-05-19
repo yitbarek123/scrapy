@@ -12,10 +12,14 @@ class CryptoscraperSpider(scrapy.Spider):
     name = "cryptoscraper"
     allowed_domains = ["bitmart.com"]
     start_urls = ["https://www.bitmart.com/trade/en-US?layout=pro&theme=dark&symbol=BTC_USDT"]
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
 
     def start_requests(self):
         ps=["BTC_USDT","ETH_USDT","ADA_USDT","XRP_USDT"]
-        ps=["BTC_USDT"]
+        #ps=["BTC_USDT"]
         for p in ps:
             yield scrapy.Request("https://www.bitmart.com/trade/en-US?layout=pro&theme=dark&symbol="+p,meta={'playwright':True})
             print(ps)
@@ -32,6 +36,16 @@ class CryptoscraperSpider(scrapy.Spider):
     
     async def parse(self, response):
         lock_file = '/shared_lock_files/'+str(response.url[65:].replace("_",""))+'.lock'
+        
+        cnt2=0
+        while os.path.exists(lock_file):
+            print("Lock file exists. Waiting to acquire the lock...")
+            if cnt2>71800:
+                os.remove(lock_file)
+                cnt2=0
+            cnt2+=1
+            time.sleep(0.5)
+
         while os.path.exists(lock_file):
             print("Lock file exists. Waiting to acquire the lock...")
             time.sleep(1)
@@ -57,6 +71,8 @@ class CryptoscraperSpider(scrapy.Spider):
             await page.goto(response.url)
 
             await page.wait_for_timeout(30000)
+            old_result=""
+            cnt=1
             while True:
                 temp=0
                 # item-col price buy
@@ -97,19 +113,32 @@ class CryptoscraperSpider(scrapy.Spider):
                     if t==1 and t2==2 and t3==3 and temp==1:
                         print(text_contentt)
                         result_lists.append(text_contentt)
-                if cnt==0:
-                    old_result=result_lists[0]
-                if cnt>1200:
-                    if result_lists[0]==old_result:
+                print(result_lists)
+                if old_result=="":
+                    if len(result_lists)>0:
+                        old_result=result_lists[0]
+                if cnt%1200==0:
+                    if old_result==result_lists[0]:
                         os.remove(lock_file)
                         print("lock released")
+                        cnt=1
                         break
                     old_result=result_lists[0]
-                    cnt=0
-                if result_lists==[]:
-                    os.remove(lock_file)
+                if cnt>72000:
+                    #if result_lists[0]==old_result:
+                    try:
+                        os.remove(lock_file)
+                    except:
+                        pass
                     print("lock released")
+                    cnt=1
                     break
+                if cnt>1500:
+                    if result_lists==[]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
                 cnt+=1
                 print(cnt)
                 result_list_of_tuples=[tuple(result_lists[i:i+4]) for i in range(0, len(result_lists), 4)]

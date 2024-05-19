@@ -11,10 +11,13 @@ class CryptoscraperSpider(scrapy.Spider):
     name = "cryptoscraper"
     allowed_domains = ["deepcoin.com"]
     start_urls = ["https://www.deepcoin.com/en/Spot?currentId=BTC%2FUSDT"]
-
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
     def start_requests(self):
         ps=["BTC%2FUSDT","ETH%2FUSDT","ADA%2FUSDT","XRP%2FUSDT"]
-        ps=["BTC%2FUSDT"]
+        #ps=["BTC%2FUSDT"]
 
         for p in ps:
             yield scrapy.Request("https://www.deepcoin.com/en/Spot?currentId="+p,meta={'playwright':True},cb_kwargs={'p': p})
@@ -32,6 +35,14 @@ class CryptoscraperSpider(scrapy.Spider):
     
     async def parse(self, response,p):
         lock_file = '/shared_lock_files/'+str(response.url[43:].replace("%",""))+'.lock'
+        cnt2=0
+        while os.path.exists(lock_file):
+            print("Lock file exists. Waiting to acquire the lock...")
+            if cnt2>71800:
+                os.remove(lock_file)
+                cnt2=0
+            cnt2+=1
+            time.sleep(0.5)
         # Attempt to acquire the lock
         while os.path.exists(lock_file):
             print("Lock file exists. Waiting to acquire the lock...")
@@ -68,6 +79,8 @@ class CryptoscraperSpider(scrapy.Spider):
             pp= page.locator(f'//div[@class="trades-header"]//a[@class="tab"]')
             await pp.click()
             await page.wait_for_timeout(10000)
+            old_result=""
+            cnt=1
             while True:
                 xpath = '//div[@class="market-list"]//div[@class="content"]//span'
                 elements_amount = await page.query_selector_all(xpath)
@@ -84,28 +97,41 @@ class CryptoscraperSpider(scrapy.Spider):
                         result_lists.append("sell")
                     result_lists.append(text_contentt.replace("\n","").replace(" ",""))
                     #print(class_name)
-                if cnt==0:
-                    old_result=result_lists[0]
-                if cnt>1200:
-                    if result_lists[0]==old_result:
+                print(result_lists)
+                if old_result=="":
+                    if len(result_lists)>0:
+                        old_result=result_lists[0]
+                if cnt%1200==0:
+                    if old_result==result_lists[0]:
                         os.remove(lock_file)
                         print("lock released")
+                        cnt=1
                         break
                     old_result=result_lists[0]
-                    cnt=0
-                if result_lists==[]:
-                    os.remove(lock_file)
+                if cnt>72000:
+                    #if result_lists[0]==old_result:
+                    try:
+                        os.remove(lock_file)
+                    except:
+                        pass
                     print("lock released")
+                    cnt=1
                     break
+                if cnt>1500:
+                    if result_lists==[]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
                 cnt+=1
                 print(cnt)
                 result_list_of_tuples=[tuple(result_lists[i:i+4]) for i in range(0, len(result_lists), 4)]
                 print(result_list_of_tuples)
-                time.sleep(0.3)
+                time.sleep(0.5)
                 url=response.url[43:].replace("%2F","")
                 litem['data']= result_list_of_tuples
                 litem['pair']= url.lower()
                 yield litem
                 #await page.wait_for_timeout(500)
             print("scrap again")
-            yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse)
+            yield scrapy.Request(response.url,meta={'playwright':True},cb_kwargs={'p': p})

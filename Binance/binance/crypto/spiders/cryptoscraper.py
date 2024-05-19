@@ -6,17 +6,22 @@ from datetime import datetime
 import time
 import asyncio
 from crypto.items import CryptoItem
+import os
 
 class CryptoscraperSpider(scrapy.Spider):
     name = "cryptoscraper"
-    allowed_domains = ["bitmart.com"]
+    allowed_domains = ["binance.com"]
     start_urls = ["https://www.bitmart.com/trade/en-US?layout=pro&theme=dark&symbol=BTC_USDT"]
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
 
     def start_requests(self):
         ps=["BTC_USDT","ETH_USDT","ADA_USDT","XRP_USDT"]
-        ps=["BTC_USDT"]
+        #ps=["BTC_USDT"]
         for p in ps:
-            yield scrapy.Request("https://www.binance.com/en/trade/"+p,meta={'playwright':True})
+            yield scrapy.Request("https://www.binance.com/en/trade/"+p,meta={'playwright':True},callback=self.parse)
             print(p)
             #time.sleep(100)
 
@@ -29,6 +34,19 @@ class CryptoscraperSpider(scrapy.Spider):
             await asyncio.sleep(0.5)    
     
     async def parse(self, response):
+        lock_file = '/shared_lock_files/'+str(response.url[33:].replace("_",""))+'.lock'
+        # Attempt to acquire the lock
+        cnt2=0
+        while os.path.exists(lock_file):
+            print("Lock file exists. Waiting to acquire the lock...")
+            cnt2+=1
+            if cnt2>71800:
+                os.remove(lock_file)
+            time.sleep(0.5)
+        # Create the lock file
+        with open(lock_file, 'w') as f:
+            f.write('Lock acquired') 
+        
         data = {}
         maxValue=0
         maxToken=""
@@ -54,6 +72,8 @@ class CryptoscraperSpider(scrapy.Spider):
             button_id = 'onetrust-accept-btn-handler'
             button_selector = f'button#{button_id}'
             await page.click(button_selector)
+            old_result=""
+            cnt=1
             while True:
                 temp=0
                 # item-col price buy
@@ -79,6 +99,34 @@ class CryptoscraperSpider(scrapy.Spider):
                     result_lists2.append("buy")
                     result_lists2+=text_contentt.split("\n")
                     #print(text_contentt.split("\n"))
+                
+                if old_result=="":
+                    if len(result_lists)>0:
+                        old_result=result_lists[0]
+                if cnt%1200==0:
+                    if old_result==result_lists[0]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
+                    old_result=result_lists[0]
+                if cnt>72000:
+                    #if result_lists[0]==old_result:
+                    try:
+                        os.remove(lock_file)
+                    except:
+                        pass
+                    print("lock released")
+                    cnt=1
+                    break
+                if cnt>1500:
+                    if result_lists==[]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
+                cnt+=1
+                print(cnt)
                 result_lists+=result_lists2
                 result_list_of_tuples=[tuple(result_lists[i:i+4]) for i in range(0, len(result_lists), 4)]
                 print(result_list_of_tuples)
@@ -90,3 +138,6 @@ class CryptoscraperSpider(scrapy.Spider):
                 yield litem
                 await page.wait_for_timeout(500)
                 time.sleep(0.5)
+            print("scrap again")
+            print("scrap again2")
+            yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse)

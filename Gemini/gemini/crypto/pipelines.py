@@ -22,6 +22,7 @@ class MySQLPipeline:
         self.db_config = db_config
         self.table_name=""
         self.cnt=0
+        self.flag=False
     @classmethod
     def from_crawler(cls, crawler):
         return cls(db_config=crawler.settings.getdict('DB_CONFIG'))
@@ -121,7 +122,14 @@ class MySQLPipeline:
         # Subtract the total seconds to get the desired timestamp
         timestamp_unix = int(current_time_seconds - total_seconds)
 
-        return timestamp_unix
+        current_datetime = datetime.now()
+
+        # Extract year, month, and day
+        current_year = current_datetime.year
+        current_month = current_datetime.month
+        current_day = str(current_year)+"-"+str(current_month)+"-"+str(current_datetime.day)
+        return current_day
+
 
     def process_item(self, item, spider):
         #query = (
@@ -165,22 +173,23 @@ class MySQLPipeline:
                     #tm=self.watch_time_to_unix_timestamp(int(l[0]),int(l[1]),int(l[2]),current_time)
                     tm=self.hm_to_timestamp(int(l[0]),int(l[1]),ct)
                     l=[]
-                    l.append(tm)
+                    l.append(d[0])
                     l.append(d[1])
                     l.append(d[2])
                     l.append(d[3])
+                    l.append(tm)
                     bulk_data.append(tuple(l))
             
             if len(bulk_data)>0:
                 columns = ['amount', 'price', 'time','tradetype']
-                columns = ['time','tradetype','price', 'amount']
+                columns = ['time','tradetype','price', 'amount','todaydate']
                 query = f"INSERT IGNORE INTO {table_name} ({', '.join(columns)}) VALUES ({', '.join(['%s' for _ in range(len(columns))])})"
                 bulk_data.pop()
                 values = [value for item in bulk_data for value in item]
                 v = values            
                 print("v1")
                 print(values)
-                v=values[-4:]
+                v=values[-5:]
                 v1=v[2]
                 v2=v[3]
                 v3=v[1]
@@ -189,6 +198,8 @@ class MySQLPipeline:
                     "amount": v2,
                     "price": v1,
                     "tradetype":v3,
+                    "time":v[0],
+                    "todaydate":v[4]
                     # Add more columns and values as needed
                 }
                 print(v)
@@ -197,11 +208,14 @@ class MySQLPipeline:
                 where_conditions = " AND ".join([f"{column} = %s" for column in conditions])
                 query2 = f"SELECT * FROM {table_name} WHERE {where_conditions}"
 
-                # Execute the query with the condition values
-                self.cursor.execute(query2, tuple(conditions.values()))
-
-                # Fetch the result
-                existing_row = self.cursor.fetchall()
+                try:
+                    self.cursor.execute(query2, tuple(conditions.values()))
+                    existing_row = self.cursor.fetchall()
+                except:
+                    self.connection = mysql.connector.connect(**self.db_config)
+                    self.cursor = self.connection.cursor()
+                    self.cursor.execute(query2, tuple(conditions.values()))
+                    existing_row = self.cursor.fetchall()
 
                 # Check if the row exists
                 if existing_row:
@@ -228,29 +242,40 @@ class MySQLPipeline:
                 #    # Write each item in the list to a new line in the file
                 #    file.write(f"{values}\n")
 
-                print(f"List has been appended to {file_path}")
-                self.cursor.executemany(query, [values[i:i+len(columns)] for i in range(0, len(values), len(columns))])
+                try:
+                    self.cursor.executemany(query, [values[i:i+len(columns)] for i in range(0, len(values), len(columns))])
+                except:
+                    self.connection = mysql.connector.connect(**self.db_config)
+                    self.cursor = self.connection.cursor()
+                    self.cursor.executemany(query, [values[i:i+len(columns)] for i in range(0, len(values), len(columns))])
+
                 #self.connection.commit()
                 print("Bulk data inserted successfully!")
         except mysql.connector.Error as err:
             print(f"Error: {err}")
 
     def create_table(self,table_name):
-        try:
-            # Define the table creation query with the dynamic table name
-            create_table_query = f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
-                tradetype VARCHAR(255),
-                price VARCHAR(255),
-                amount VARCHAR(255),
-                time VARCHAR(255),
-                PRIMARY KEY (amount, price, tradetype)
-            )
-            """
-            # Execute the table creation query
-            self.cursor.execute(create_table_query)
-            # Commit the transaction
-            self.connection.commit()
-        except mysql.connector.Error as err:
-            # Handle MySQL errors
-            print(f"MySQL error: {err}")
+        if self.flag==False:
+            try:
+                # Define the table creation query with the dynamic table name
+                create_table_query = f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    price VARCHAR(25),
+                    tradetype VARCHAR(25),
+                    amount VARCHAR(25),
+                    time VARCHAR(25),
+                    todaydate VARCHAR(25),
+                    PRIMARY KEY (price,tradetype,amount,time,todaydate)
+                )
+                """
+                # Execute the table creation query
+                self.cursor.execute(create_table_query)
+                # Commit the transaction
+                self.connection.commit()
+                self.flag=True
+            except mysql.connector.Error as err:
+                # Handle MySQL errors
+                self.connection = mysql.connector.connect(**self.db_config)
+                self.cursor = self.connection.cursor()
+                self.create_table(table_name)
+                print(f"MySQL error: {err}")

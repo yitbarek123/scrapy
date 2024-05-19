@@ -11,10 +11,13 @@ class CryptoscraperSpider(scrapy.Spider):
     name = "cryptoscraper"
     allowed_domains = ["mexc.com"]
     start_urls = ["https://www.mexc.com/exchange/BTC_USDT"]
-
+    custom_settings = {
+        'DUPEFILTER_CLASS': 'scrapy.dupefilters.BaseDupeFilter',
+        'RETRY_TIMES': 3,  
+    }
     def start_requests(self):
         ps=["BTC_USDT","ADA_USDT","ETH_USDT","XRP_USDT"]
-        ps=["BTC_USDT"]#,"ADA_USDT","ETH_USDT","XRP_USDT"]
+        #ps=["BTC_USDT"]#,"ADA_USDT","ETH_USDT","XRP_USDT"]
         for p in ps:
             yield scrapy.Request("https://www.mexc.com/exchange/"+p,meta={'playwright':True},cb_kwargs={'p': p})
             print(ps)
@@ -30,6 +33,14 @@ class CryptoscraperSpider(scrapy.Spider):
     
     async def parse(self, response,p):
         lock_file = '/shared_lock_files/'+str(p.lower().replace("_",""))+'.lock'
+        cnt2=0
+        while os.path.exists(lock_file):
+            print("Lock file exists. Waiting to acquire the lock...")
+            if cnt2>71800:
+                os.remove(lock_file)
+                cnt2=0
+            cnt2+=1
+            time.sleep(0.5)
         # Attempt to acquire the lock
         while os.path.exists(lock_file):
             print("Lock file exists. Waiting to acquire the lock...")
@@ -58,6 +69,8 @@ class CryptoscraperSpider(scrapy.Spider):
             #await page.wait_for_timeout(10000)
             #await browser.new_context(viewport={"width":1920, "height":1080})
             await page.wait_for_timeout(30000)
+            old_result=""
+            cnt=1
             while True:
                 xpath = '//body//div[@class="deals_price__uztEy deals_sell__ZBqnq" or @class="deals_price__uztEy deals_buy__TUl7M" or @class="deals_vol__5h24A" or @class="deals_time__RCCW2"]'
                 elements_amount = await page.query_selector_all(xpath)
@@ -75,19 +88,33 @@ class CryptoscraperSpider(scrapy.Spider):
                         result_lists.append("sell")
                     if "Amo" not in text_contentt and "Time" not in text_contentt:
                         result_lists.append(text_contentt)
-                if cnt==0:
-                    old_result=result_lists[0]
-                if cnt>1200:
-                    if result_lists[0]==old_result:
+                
+                print(result_lists)
+                if old_result=="":
+                    if len(result_lists)>0:
+                        old_result=result_lists[0]
+                if cnt%1200==0:
+                    if old_result==result_lists[0]:
                         os.remove(lock_file)
                         print("lock released")
+                        cnt=1
                         break
                     old_result=result_lists[0]
-                    cnt=0
-                if result_lists==[]:
-                    os.remove(lock_file)
+                if cnt>72000:
+                    #if result_lists[0]==old_result:
+                    try:
+                        os.remove(lock_file)
+                    except:
+                        pass
                     print("lock released")
+                    cnt=1
                     break
+                if cnt>1500:
+                    if result_lists==[]:
+                        os.remove(lock_file)
+                        print("lock released")
+                        cnt=1
+                        break
                 cnt+=1
                 print(cnt)
 
@@ -100,4 +127,4 @@ class CryptoscraperSpider(scrapy.Spider):
                 await page.wait_for_timeout(1000)
                 time.sleep(1)
             print("scrap again")
-            yield scrapy.Request(response.url,meta={'playwright':True},callback=self.parse)
+            yield scrapy.Request("https://www.mexc.com/exchange/"+p,meta={'playwright':True},cb_kwargs={'p': p})

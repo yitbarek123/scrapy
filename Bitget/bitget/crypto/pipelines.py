@@ -22,6 +22,7 @@ class MySQLPipeline:
         self.db_config = db_config
         self.table_name=""
         self.cnt=0
+        self.flag=False
 
     @classmethod
     def from_crawler(cls, crawler):
@@ -145,7 +146,13 @@ class MySQLPipeline:
             adapter = ItemAdapter(item)
             data = adapter.get("data")
             table_name=adapter.get("pair")
-            self.create_table(table_name)
+
+            try:
+                self.create_table(table_name)
+            except:
+                self.connection = mysql.connector.connect(**self.db_config)
+                self.cursor = self.connection.cursor()
+                self.create_table(table_name)
             print("######################")
             print("######################")
             print(table_name)
@@ -197,11 +204,15 @@ class MySQLPipeline:
                 where_conditions = " AND ".join([f"{column} = %s" for column in conditions])
                 query2 = f"SELECT * FROM {table_name} WHERE {where_conditions}"
 
-                # Execute the query with the condition values
-                self.cursor.execute(query2, tuple(conditions.values()))
+                try:
+                    self.cursor.execute(query2, tuple(conditions.values()))
+                    existing_row = self.cursor.fetchall()
+                except:
+                    self.connection = mysql.connector.connect(**self.db_config)
+                    self.cursor = self.connection.cursor()
+                    self.cursor.execute(query2, tuple(conditions.values()))
+                    existing_row = self.cursor.fetchall()
 
-                # Fetch the result
-                existing_row = self.cursor.fetchall()
 
                 # Check if the row exists
                 if existing_row:
@@ -229,28 +240,39 @@ class MySQLPipeline:
                 #    file.write(f"{values}\n")
 
                 print(f"List has been appended to {file_path}")
-                self.cursor.executemany(query, [values[i:i+len(columns)] for i in range(0, len(values), len(columns))])
+                try:
+                    self.cursor.executemany(query, [values[i:i+len(columns)] for i in range(0, len(values), len(columns))])
+                except:
+                    self.connection = mysql.connector.connect(**self.db_config)
+                    self.cursor = self.connection.cursor()
+                    self.cursor.executemany(query, [values[i:i+len(columns)] for i in range(0, len(values), len(columns))])   
                 #self.connection.commit()
                 print("Bulk data inserted successfully!")
         except mysql.connector.Error as err:
             print(f"Error: {err}")
 
     def create_table(self,table_name):
-        try:
-            # Define the table creation query with the dynamic table name
-            create_table_query = f"""
-            CREATE TABLE IF NOT EXISTS {table_name} (
-                tradetype VARCHAR(255),
-                price VARCHAR(255),
-                amount VARCHAR(255),
-                time VARCHAR(255),
-                PRIMARY KEY (amount, price, time)
-            )
-            """
-            # Execute the table creation query
-            self.cursor.execute(create_table_query)
-            # Commit the transaction
-            self.connection.commit()
-        except mysql.connector.Error as err:
-            # Handle MySQL errors
-            print(f"MySQL error: {err}")
+        if self.flag==False:
+            try:
+                # Define the table creation query with the dynamic table name
+                create_table_query = f"""
+                CREATE TABLE IF NOT EXISTS {table_name} (
+                    price VARCHAR(25),
+                    tradetype VARCHAR(25),
+                    amount VARCHAR(25),
+                    time VARCHAR(25),
+                    todaydate VARCHAR(25),
+                    PRIMARY KEY (price,tradetype,amount,time,todaydate)
+                )
+                """
+                # Execute the table creation query
+                self.cursor.execute(create_table_query)
+                # Commit the transaction
+                self.connection.commit()
+                self.flag=True
+            except mysql.connector.Error as err:
+                # Handle MySQL errors
+                self.connection = mysql.connector.connect(**self.db_config)
+                self.cursor = self.connection.cursor()
+                self.create_table(table_name)
+                print(f"MySQL error: {err}")
