@@ -1,3 +1,5 @@
 *.lock
 *.swp
 *shared_lock_files2
+*__pycache__
+*.txt
